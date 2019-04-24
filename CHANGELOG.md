@@ -4,6 +4,62 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/) 
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## [3.1.0] - 2018-11-20
+### Added
+- Focus on song #56
+### Fixed
+- Do not poll spotify if window is not focused on Mac OS (reducing CPU load).
+- Smaller icon size in Activity bar #58
+
+## [3.0.4] - 2018-10-07
+### Fixed
+- Invalid version in changelog.
+
+## [3.0.3] - 2018-10-07
+### Fixed
+- Invalid showLyricsButtonSignInButton, showLyricsButtonSignOutButton params.
+
+## [3.0.2] - 2018-10-07
+### Fixed
+- Missing option for show signIn and signOut button #54 (kudos to negebauer(Nicolás Gebauer))
+
+## [3.0.1] - 2018-10-07
+### Fixed
+- Tooltip Missing Album Name in Tree Track. #52 (kudos to mikqi(Muhammad Rivki))
+
+## [3.0.0] - 2018-10-05
+### Added
+- Spotify Web Api implementation to enable this extension on Windows.
+- Playlist/tracks custom view TreeDataProviders.
+### Refactored
+- Refactored state to use Redux.
+### Fixed
+- Spotilocal is not initialized. #46
+- Installed vscode-spotify extension but not working #43
+- Status Bar Icons Disappeared #42
+- Utilize the new Spotify Player API #27
+
+## [2.6.1] - 2018-08-30
+### Fixed
+- Fixed Play, Pause, PlayPause, Volume controlls on linux. ONLY on Linux(dbus)
+- Fixed performance issue on MacOs(to manny querys)
+
+## [2.6.0] - 2018-08-27
+### Fixed
+- Fix for Status Bar Icons Disappeared (#42). ONLY on Linux(dbus)
+
+## [2.5.1] - 2018-07-23
+### Fixed
+- Emergency fix for Status Bar Icons Disappeared (#42). ONLY on MacOS
+
+## [2.5.0] - 2018-06-26
+### Fixed
+- Use dbus on Linux (improved linux support) (#14) (kudos to audstanley(Richard Stanley)(https://github.com/audstanley))
+
+## [2.4.0] - 2018-03-25
+### Fixed
+- Change default mac keybindings for play previous/next (#34) (kudos to ecbrodie(Evan Brodie)(https://github.com/ecbrodie)) @see the reasoning behind this at https://github.com/ShyykoSerhiy/vscode-spotify/pull/34
+
 ## [2.3.2] - 2018-02-23
 ### Fixed
 - `trackInfoPriority` setting has no effect (#30) (kudos to realbizkit(András Szepes)(https://github.com/realbizkit))

@@ -10,9 +10,17 @@
 		"noUnusedLocals": true,
 		"noUnusedParameters": true,
 		"strictNullChecks": true,
-		"experimentalDecorators": true
+		"experimentalDecorators": true,
+		"skipLibCheck": true,
+		"alwaysStrict": true
 	},
+	"include": [
+		"src/**/*"
+    ],
 	"exclude": [
 		"node_modules"
-	]
+	],
+	"files": [
+        "typings/spotify-node-applescript.d.ts"
+    ]
 }
