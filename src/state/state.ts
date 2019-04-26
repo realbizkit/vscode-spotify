@@ -1,3 +1,4 @@
+import { Api } from '@vscodespotify/spotify-common';
 import { Playlist as Playlist, Track } from '@vscodespotify/spotify-common/lib/spotify/consts';
 import { Map } from 'immutable';
 
@@ -61,7 +62,7 @@ export interface ISpotifyStatusStatePartial {
 }
 
 export interface ISpotifyStatusState extends ISpotifyStatusStatePartial {
-    loginState: ILoginState | null;
+    loginState?: ILoginState;
     playlists: Playlist[];
     selectedPlaylist?: Playlist;
     /**
@@ -69,6 +70,7 @@ export interface ISpotifyStatusState extends ISpotifyStatusStatePartial {
      */
     tracks: Map<Playlist['id'], Track[]>;
     selectedTrack: Track | null;
+    api?: Api;
 }
 
 export const DUMMY_PLAYLIST: Playlist = {
@@ -119,10 +121,10 @@ export const DEFAULT_STATE: ISpotifyStatusState = {
         name: ''
     },
     isRunning: false,
-    loginState: null,
     context: void 0,
     playlists: [],
     selectedPlaylist: void 0,
     tracks: Map(),
-    selectedTrack: null
+    selectedTrack: null,
+    api: undefined
 };

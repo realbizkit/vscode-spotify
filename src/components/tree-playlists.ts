@@ -1,21 +1,23 @@
+import { inject, injectable } from 'inversify';
 import * as path from 'path';
 import * as vscode from 'vscode';
 
-import { actionsCreator } from '../actions/actions';
+import { SpotifyAction } from '../actions/actions';
+import { TYPES } from '../ioc/types';
 import { Playlist } from '../state/state';
-import { getState, getStore } from '../store/store';
+import { SpotifyStore } from '../store/store';
 
-export const connectPlaylistTreeView = (view: vscode.TreeView<Playlist>) =>
-    vscode.Disposable.from(
+export function connectPlaylistTreeView(view: vscode.TreeView<Playlist>, store: SpotifyStore, action: SpotifyAction) {
+    return vscode.Disposable.from(
         view.onDidChangeSelection(e => {
-            actionsCreator.selectPlaylistAction(e.selection[0]);
-            actionsCreator.loadTracksIfNotLoaded(e.selection[0]);
+            store.dispatch(action.selectPlaylist(e.selection[0]));
+            store.dispatch(action.loadTracksIfNotLoaded(e.selection[0]));
         }),
         view.onDidChangeVisibility(e => {
             if (e.visible) {
-                const state = getState();
+                const state = store.getState();
                 if (!state.playlists.length) {
-                    actionsCreator.loadPlaylists();
+                    store.dispatch(action.loadPlaylists());
                 }
 
                 if (state.selectedPlaylist) {
@@ -27,16 +29,20 @@ export const connectPlaylistTreeView = (view: vscode.TreeView<Playlist>) =>
             }
         })
     );
+}
 
+@injectable()
 export class TreePlaylistProvider implements vscode.TreeDataProvider<Playlist> {
     readonly onDidChangeTreeDataEmitter: vscode.EventEmitter<Playlist | undefined> = new vscode.EventEmitter<Playlist | undefined>();
     readonly onDidChangeTreeData: vscode.Event<Playlist | undefined> = this.onDidChangeTreeDataEmitter.event;
 
     private playlists: Playlist[];
 
-    constructor() {
-        getStore().subscribe(() => {
-            const { playlists } = getState();
+    constructor(
+        @inject(TYPES.Store) private store: SpotifyStore
+    ) {
+        this.store.subscribe(() => {
+            const { playlists } = this.store.getState();
 
             if (this.playlists !== playlists) {
                 this.playlists = playlists;

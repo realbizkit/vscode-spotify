@@ -1,7 +1,8 @@
 import { showInformationMessage } from '../info/info';
 import { ISpotifyStatusStatePartial } from '../state/state';
+import { createCancelablePromise } from '../utils/utils';
 
-import { createCancelablePromise, SpotifyClient } from './spotify-client';
+import { SpotifyClient } from './spotify-client';
 
 function notSupported(_ignoredTarget: any, _ignoredPropertyKey: string, descriptor: PropertyDescriptor): PropertyDescriptor {
     const fn = descriptor.value;
@@ -20,8 +21,8 @@ function notSupported(_ignoredTarget: any, _ignoredPropertyKey: string, descript
 
 // tslint:disable:no-empty
 export class OsAgnosticSpotifyClient implements SpotifyClient {
-    get queryStatusFunc() {
-        return this.next;
+    queryStatus() {
+        this.next();
     }
 
     @notSupported

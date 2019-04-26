@@ -1,298 +1,152 @@
-import { Api, getApi } from '@vscodespotify/spotify-common/lib/spotify/api';
+import { Api } from '@vscodespotify/spotify-common/lib/spotify/api';
 import { Playlist, Track } from '@vscodespotify/spotify-common/lib/spotify/consts';
-import autobind from 'autobind-decorator';
-import { commands, Uri, window } from 'vscode';
+import { injectable } from 'inversify';
+import { Action } from 'redux';
+import 'reflect-metadata';
 
-import { createDisposableAuthSever } from '../auth/server/local';
-import { getAuthServerUrl } from '../config/spotify-config';
-import { log, showInformationMessage, showWarningMessage } from '../info/info';
-import { DUMMY_PLAYLIST, ILoginState, ISpotifyStatusState } from '../state/state';
-import { getState, getStore } from '../store/store';
-import { artistsToArtist } from '../utils/utils';
+import { ISpotifyStatusState } from '../state/state';
 
-export function withApi() {
-    return (_target: any, _key: any, descriptor: PropertyDescriptor) => {
-        const originalMethod = descriptor.value;
-
-        descriptor.value = (...args: any[]) => {
-            const api = getSpotifyWebApi();
-            if (api) {
-                return originalMethod.apply(this, [...args, api]);
-            } else {
-                showWarningMessage('You should be logged in order to use this feature.');
-            }
-        };
-
-        return descriptor;
-    };
+export interface ActionWithPayload<T = unknown> extends Action {
+    payload: T;
 }
 
-export function withErrorAsync() {
-    return (_target: any, _key: any, descriptor: PropertyDescriptor) => {
-        const originalMethod = descriptor.value;
-
-        descriptor.value = async (...args: any[]) => {
-            try {
-                return await originalMethod.apply(this, args);
-            } catch (e) {
-                showWarningMessage('Failed to perform operation ' + e.message || e);
-            }
-        };
-
-        return descriptor;
-    };
-}
-
-function actionCreator() {
-    return (_target: any, _key: any, descriptor: PropertyDescriptor) => {
-        const originalMethod = descriptor.value;
-
-        descriptor.value = (...args: any[]) => {
-            const action = originalMethod.apply(this, args);
-            if (!action) {
-                return;
-            }
-            getStore().dispatch(action);
-        };
-
-        return descriptor;
-    };
-}
-
-function asyncActionCreator() {
-    return (_target: any, _key: any, descriptor: PropertyDescriptor) => {
-        const originalMethod = descriptor.value;
-
-        descriptor.value = async (...args: any[]) => {
-            let action;
-            try {
-                action = await originalMethod.apply(this, args);
-                if (!action) {
-                    return;
-                }
-            } catch (e) {
-                showWarningMessage('Failed to perform operation ' + e.message || e);
-            }
-            getStore().dispatch(action);
-        };
-
-        return descriptor;
-    };
-}
-
-const apiMap = new WeakMap<ILoginState, Api>();
-export const getSpotifyWebApi = () => {
-    const { loginState } = getState();
-    if (!loginState) {
-        log('getSpotifyWebApi', 'NOT LOGGED IN');
-        return null;
-    }
-    if (!window.state.focused) {
-        log('getSpotifyWebApi', 'NOT FOCUSED');
-        return null;
-    }
-    let api = apiMap.get(loginState);
-    if (!api) {
-        api = getApi(getAuthServerUrl(), loginState.accessToken, loginState.refreshToken, (token: string) => {
-            actionsCreator._actionSignIn(token, loginState.refreshToken);
-        });
-        apiMap.set(loginState, api);
-    }
-    return api;
-};
-
-export const UPDATE_STATE_ACTION = 'UPDATE_STATE_ACTION' as 'UPDATE_STATE_ACTION';
-export const SIGN_IN_ACTION = 'SIGN_IN_ACTION' as 'SIGN_IN_ACTION';
-export const SIGN_OUT_ACTION = 'SIGN_OUT_ACTION' as 'SIGN_OUT_ACTION';
-export const PLAYLISTS_LOAD_ACTION = 'PLAYLISTS_LOAD_ACTION' as 'PLAYLISTS_LOAD_ACTION';
-export const SELECT_PLAYLIST_ACTION = 'SELECT_PLAYLIST_ACTION' as 'SELECT_PLAYLIST_ACTION';
-export const TRACKS_LOAD_ACTION = 'TRACKS_LOAD_ACTION' as 'TRACKS_LOAD_ACTION';
-export const SELECT_TRACK_ACTION = 'SELECT_TRACK_ACTION' as 'SELECT_TRACK_ACTION';
-
-export interface UpdateStateAction {
-    type: typeof UPDATE_STATE_ACTION;
-    state: Partial<ISpotifyStatusState>;
-}
-
-export interface SignInAction {
-    type: typeof SIGN_IN_ACTION;
+export interface SignInSuccessPayload {
     accessToken: string;
     refreshToken: string;
 }
 
-export interface SignOutAction {
-    type: typeof SIGN_OUT_ACTION;
-}
-
-export interface PlaylistsLoadAction {
-    type: typeof PLAYLISTS_LOAD_ACTION;
-    playlists: Playlist[];
-}
-
-export interface TracksLoadAction {
-    type: typeof TRACKS_LOAD_ACTION;
+export interface LoadTracksSuccessPayload {
     playlist: Playlist;
     tracks: Track[];
 }
 
-export interface SelectPlaylistAction {
-    type: typeof SELECT_PLAYLIST_ACTION;
+export interface PlayTrackPayload {
+    offset: number;
     playlist: Playlist;
 }
 
-export interface SelectTrackAction {
-    type: typeof SELECT_TRACK_ACTION;
-    track: Track;
+export enum SpotifyActionType {
+    UPDATE_STATE = 'Update State',
+    SIGN_IN = 'Sign In',
+    SIGN_IN_SUCCESS = 'Sign In Success',
+    SIGN_OUT = 'Sign Out',
+    LOAD_PLAYLISTS = 'Load Playlists',
+    LOAD_PLAYLISTS_SUCCESS = 'Load Playlists Success',
+    SELECT_PLAYLIST = 'Select Playlists',
+    LOAD_TRACKS = 'Load Tracks',
+    LOAD_TRACKS_IF_NOT_LODADED = 'Load Tracks If Not Loaded',
+    LOAD_TRACKS_FOR_SELECTED_PLAYLIST = 'Load Tracks For Selected Playlist',
+    LOAD_TRACKS_SUCCESS = 'Load Tracks Success',
+    SELECT_TRACK = 'Select Track',
+    SELECT_CURRENT_TRACK = 'Select Current Track',
+    SAVE_API = 'Save Api',
+    PLAY_TRACK = 'Play Track'
 }
 
-class ActionCreator {
-    @autobind
-    @actionCreator()
-    updateStateAction(state: Partial<ISpotifyStatusState>): UpdateStateAction {
+@injectable()
+export class SpotifyAction {
+
+    updateState(update: Partial<ISpotifyStatusState>): ActionWithPayload<Partial<ISpotifyStatusState>> {
         return {
-            type: UPDATE_STATE_ACTION,
-            state
+            type: SpotifyActionType.UPDATE_STATE,
+            payload: update
         };
     }
 
-    @autobind
-    @asyncActionCreator()
-    @withApi()
-    async loadPlaylists(api?: Api): Promise<PlaylistsLoadAction> {
-        const playlists = await api!.playlists.getAll();
+    loadPlaylists(): Action {
         return {
-            type: PLAYLISTS_LOAD_ACTION,
-            playlists
+            type: SpotifyActionType.LOAD_PLAYLISTS
         };
     }
 
-    @autobind
-    @actionCreator()
-    selectPlaylistAction(p: Playlist): SelectPlaylistAction {
+    loadPlaylistsSuccess(playlists: Playlist[]): ActionWithPayload<Playlist[]> {
         return {
-            type: SELECT_PLAYLIST_ACTION,
-            playlist: p
+            type: SpotifyActionType.LOAD_PLAYLISTS_SUCCESS,
+            payload: playlists
         };
     }
 
-    @autobind
-    @actionCreator()
-    selectTrackAction(track: Track): SelectTrackAction {
+    selectPlaylist(playlist: Playlist): ActionWithPayload<Playlist> {
         return {
-            type: SELECT_TRACK_ACTION,
-            track
+            type: SpotifyActionType.SELECT_PLAYLIST,
+            payload: playlist
         };
     }
 
-    @autobind
-    selectCurrentTrack() {
-        const state = getState();
-        if (state.playerState && state.track) {
-            let track: Track;
-            const currentTrack = state.track;
-            const playlist = state.playlists.find(p => {
-                const tracks = state.tracks.get(p.id);
-                if (tracks) {
-                    const foundTrack = tracks.find(t => t.track.name === currentTrack.name
-                        && t.track.album.name === currentTrack.album
-                        && artistsToArtist(t.track.artists) === currentTrack.artist);
+    selectTrack(track: Track): ActionWithPayload<Track> {
+        return {
+            type: SpotifyActionType.SELECT_TRACK,
+            payload: track
+        };
+    }
 
-                    if (foundTrack) {
-                        track = foundTrack;
-                        return true;
-                    }
-                }
-                return false;
-            });
+    selectCurrentTrack(): Action {
+        return {
+            type: SpotifyActionType.SELECT_CURRENT_TRACK
+        };
+    }
 
-            if (playlist) {
-                this.selectPlaylistAction(playlist);
-                this.selectTrackAction(track!);
+    loadTracksIfNotLoaded(playlist: Playlist): ActionWithPayload<Playlist> {
+        return {
+            type: SpotifyActionType.LOAD_TRACKS_IF_NOT_LODADED,
+            payload: playlist
+        };
+    }
+
+    loadTracks(playlist: Playlist): ActionWithPayload<Playlist> {
+        return {
+            type: SpotifyActionType.LOAD_TRACKS,
+            payload: playlist
+        };
+    }
+
+    loadTracksSuccess(payload: LoadTracksSuccessPayload): ActionWithPayload<LoadTracksSuccessPayload> {
+        return {
+            type: SpotifyActionType.LOAD_TRACKS_SUCCESS,
+            payload
+        };
+    }
+
+    loadTracksForSelectedPlaylist(): Action {
+        return {
+            type: SpotifyActionType.LOAD_TRACKS_FOR_SELECTED_PLAYLIST
+        };
+    }
+
+    playTrack(offset: number, playlist: Playlist): ActionWithPayload<PlayTrackPayload> {
+        return {
+            type: SpotifyActionType.PLAY_TRACK,
+            payload: {
+                offset,
+                playlist
             }
-        }
-    }
-
-    @autobind
-    loadTracksForSelectedPlaylist(): void {
-        this.loadTracks(getState().selectedPlaylist);
-    }
-
-    @autobind
-    loadTracksIfNotLoaded(playlist: Playlist): void {
-        if (!playlist) {
-            return void 0;
-        }
-        const { tracks } = getState();
-        if (!tracks.has(playlist.id)) {
-            this.loadTracks(playlist);
-        }
-    }
-
-    @autobind
-    @asyncActionCreator()
-    @withApi()
-    async loadTracks(playlist?: Playlist, api?: Api): Promise<TracksLoadAction | undefined> {
-        if (!playlist || playlist.id === DUMMY_PLAYLIST.id) {
-            return void 0;
-        }
-        const tracks = await api!.playlists.tracks.getAll(playlist);
-        return {
-            type: TRACKS_LOAD_ACTION,
-            playlist,
-            tracks
         };
     }
 
-    @autobind
-    @withErrorAsync()
-    @withApi()
-    async playTrack(offset: number, playlist: Playlist, api?: Api): Promise<undefined> {
-        await api!.player.play.put({
-            offset,
-            albumUri: playlist.uri
-        });
-        return;
-    }
-
-    @autobind
-    actionSignIn() {
-        commands.executeCommand('vscode.open', Uri.parse(`${getAuthServerUrl()}/login`)).then(() => {
-            const { createServerPromise, dispose } = createDisposableAuthSever();
-            createServerPromise.then(({ access_token, refresh_token }) => {
-                this._actionSignIn(access_token, refresh_token);
-            }).catch(e => {
-                showInformationMessage(`Failed to retrieve access token : ${JSON.stringify(e)}`);
-            }).then(() => {
-                dispose();
-            });
-        });
-    }
-
-    @autobind
-    @actionCreator()
-    _actionSignIn(accessToken: string, refreshToken: string): SignInAction {
+    signIn(): Action {
         return {
-            accessToken,
-            refreshToken,
-            type: SIGN_IN_ACTION
+            type: SpotifyActionType.SIGN_IN
         };
     }
 
-    @autobind
-    @actionCreator()
-    actionSignOut(): SignOutAction {
+    signInSuccess(accessToken: string, refreshToken: string): ActionWithPayload<SignInSuccessPayload> {
+        const payload: SignInSuccessPayload = { accessToken, refreshToken };
         return {
-            type: SIGN_OUT_ACTION
+            type: SpotifyActionType.SIGN_IN_SUCCESS,
+            payload
+        };
+    }
+
+    signOut(): Action {
+        return {
+            type: SpotifyActionType.SIGN_OUT
+        };
+    }
+
+    saveApi(payload: Api): ActionWithPayload<Api> {
+        return {
+            type: SpotifyActionType.SAVE_API,
+            payload
         };
     }
 }
-
-export type Action = UpdateStateAction |
-    SignInAction |
-    SignOutAction |
-    PlaylistsLoadAction |
-    SelectPlaylistAction |
-    TracksLoadAction |
-    SelectTrackAction;
-
-export const actionsCreator = new ActionCreator();

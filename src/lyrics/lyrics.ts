@@ -1,11 +1,13 @@
-import { Event, EventEmitter, ProgressLocation, TextDocumentContentProvider, Uri, window, workspace } from 'vscode';
+import { inject, injectable } from 'inversify';
+import { Disposable, Event, EventEmitter, ProgressLocation, TextDocumentContentProvider, Uri, window, workspace } from 'vscode';
 
-import { getLyricsServerUrl, openPanelLyrics } from '../config/spotify-config';
+import { SpotifyConfig } from '../config/spotify-config';
 import { showInformationMessage } from '../info/info';
+import { TYPES } from '../ioc/types';
 import { xhr } from '../request/request';
-import { getState } from '../store/store';
+import { SpotifyStore } from '../store/store';
 
-class TextContentProvider implements TextDocumentContentProvider {
+export class TextContentProvider implements TextDocumentContentProvider {
     htmlContent = '';
 
     private _onDidChange = new EventEmitter<Uri>();
@@ -23,12 +25,21 @@ class TextContentProvider implements TextDocumentContentProvider {
     }
 }
 
+@injectable()
 export class LyricsController {
-    private static LYRICS_CONTENT_PROVIDER = new TextContentProvider();
 
-    readonly registration = workspace.registerTextDocumentContentProvider('vscode-spotify', LyricsController.LYRICS_CONTENT_PROVIDER);
+    readonly registration: Disposable;
 
     private readonly previewUri = Uri.parse('vscode-spotify://authority/vscode-spotify');
+    private textContentProvider: TextContentProvider;
+
+    constructor(
+        @inject(TYPES.Store) private store: SpotifyStore,
+        @inject(TYPES.Config) private config: SpotifyConfig
+    ) {
+        this.textContentProvider = new TextContentProvider();
+        this.registration = workspace.registerTextDocumentContentProvider('vscode-spotify', this.textContentProvider);
+    }
 
     async findLyrics() {
         window.withProgress({ location: ProgressLocation.Window, title: 'Searching for lyrics. This might take a while.' }, () =>
@@ -36,12 +47,12 @@ export class LyricsController {
     }
 
     private async _findLyrics() {
-        const state = getState();
+        const state = this.store.getState();
         const { artist, name } = state.track;
 
         try {
             const result = await xhr({
-                url: `${getLyricsServerUrl()}?artist=${encodeURIComponent(artist)}&title=${encodeURIComponent(name)}`
+                url: `${this.config.getLyricsServerUrl()}?artist=${encodeURIComponent(artist)}&title=${encodeURIComponent(name)}`
             });
             await this._previewLyrics(`${artist} - ${name}\n\n${result.responseText.trim()}`);
         } catch (e) {
@@ -55,12 +66,12 @@ export class LyricsController {
     }
 
     private async _previewLyrics(lyrics: string) {
-        LyricsController.LYRICS_CONTENT_PROVIDER.htmlContent = lyrics;
-        LyricsController.LYRICS_CONTENT_PROVIDER.update(this.previewUri);
+        this.textContentProvider.htmlContent = lyrics;
+        this.textContentProvider.update(this.previewUri);
 
         try {
             const document = await workspace.openTextDocument(this.previewUri);
-            await window.showTextDocument(document, openPanelLyrics(), true);
+            await window.showTextDocument(document, this.config.openPanelLyrics(), true);
         } catch (_ignored) {
             showInformationMessage('Failed to show lyrics' + _ignored);
         }

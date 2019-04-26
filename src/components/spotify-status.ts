@@ -1,21 +1,28 @@
+import { inject, injectable } from 'inversify';
 import { StatusBarAlignment, StatusBarItem, window } from 'vscode';
 
-import { getButtonPriority, getTrackInfoClickBehaviour, getTrackInfoFormat } from '../config/spotify-config';
+import { SpotifyConfig } from '../config/spotify-config';
+import { TYPES } from '../ioc/types';
 import { ILoginState, ITrack } from '../state/state';
-import { getState, getStore } from '../store/store';
+import { SpotifyStore } from '../store/store';
 
 import { SpotifyControls } from './spotify-controls';
 
+@injectable()
 export class SpotifyStatus {
     /**
      * Status bar with info from spotify
      */
     private _statusBarItem: StatusBarItem;
-    private _spotifyControls: SpotifyControls;
-    private loginState: ILoginState | null = null;
+    private loginState: ILoginState | undefined;
 
-    constructor() {
-        getStore().subscribe(() => {
+    constructor(
+        @inject(TYPES.Store) private store: SpotifyStore,
+        @inject(TYPES.Config) private config: SpotifyConfig,
+        @inject(TYPES.Controls) private controls: SpotifyControls
+    ) {
+        this.controls.showVisible();
+        this.store.subscribe(() => {
             this.render();
         });
     }
@@ -24,37 +31,38 @@ export class SpotifyStatus {
      * Updates spotify status bar inside vscode
      */
     render() {
-        const state = getState();
+        const state = this.store.getState();
         // Create as needed
         if (!this._statusBarItem) {
-            this._statusBarItem = window.createStatusBarItem(StatusBarAlignment.Left, getButtonPriority('trackInfo'));
+            this._statusBarItem = window.createStatusBarItem(StatusBarAlignment.Left, this.config.getButtonPriority('trackInfo'));
             this._statusBarItem.show();
-        }
-        if (!this._spotifyControls) {
-            this._spotifyControls = new SpotifyControls();
-            this._spotifyControls.showVisible();
         }
         if (this.loginState !== state.loginState) {
             this.loginState = state.loginState;
-            this._spotifyControls.showHideAuthButtons();
+            this.controls.showHideAuthButtons();
         }
 
         if (state.isRunning) {
             const { state: playing, volume, isRepeating, isShuffling } = state.playerState;
             const text = this.formattedTrackInfo(state.track);
             let toRedraw = false;
+
             if (text !== this._statusBarItem.text) {// we need this guard to prevent flickering
                 this._statusBarItem.text = text;
                 toRedraw = true;
             }
-            if (this._spotifyControls.updateDynamicButtons(playing === 'playing', volume === 0, isRepeating, isShuffling)) {
+
+            if (this.controls.updateDynamicButtons(playing === 'playing', volume === 0, isRepeating, isShuffling)) {
                 toRedraw = true;
             }
+
             if (toRedraw) {
                 this._statusBarItem.show();
-                this._spotifyControls.showVisible();
+                this.controls.showVisible();
             }
-            const trackInfoClickBehaviour = getTrackInfoClickBehaviour();
+
+            const trackInfoClickBehaviour = this.config.getTrackInfoClickBehaviour();
+
             if (trackInfoClickBehaviour === 'none') {
                 this._statusBarItem.command = undefined;
             } else {
@@ -63,7 +71,7 @@ export class SpotifyStatus {
         } else {
             this._statusBarItem.text = '';
             this._statusBarItem.hide();
-            this._spotifyControls.hideAll();
+            this.controls.hideAll();
         }
     }
 
@@ -74,8 +82,8 @@ export class SpotifyStatus {
         if (this._statusBarItem) {
             this._statusBarItem.dispose();
         }
-        if (this._spotifyControls) {
-            this._spotifyControls.dispose();
+        if (this.controls) {
+            this.controls.dispose();
         }
     }
 
@@ -87,6 +95,7 @@ export class SpotifyStatus {
             trackName: name
         };
 
-        return getTrackInfoFormat().replace(/albumName|artistName|trackName/gi, matched => keywordsMap[matched]);
+        return this.config.getTrackInfoFormat()
+            .replace(/albumName|artistName|trackName/gi, matched => keywordsMap[matched]);
     }
 }

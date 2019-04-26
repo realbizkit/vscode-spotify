@@ -1,15 +1,14 @@
 import * as express from 'express';
 import { Server } from 'http';
 
-import { getAuthServerUrl } from '../../config/spotify-config';
-import { log } from '../../info/info';
+import { SpotifyLogger } from '../../info/logger';
 
 export interface CreateDisposableAuthSeverPromiseResult {
     access_token: string;
     refresh_token: string;
 }
 
-export function createDisposableAuthSever() {
+export function createDisposableAuthServer(serverUrl: string, logger: SpotifyLogger) {
     let server: Server;
     const createServerPromise = new Promise<CreateDisposableAuthSeverPromiseResult>((res, rej) => {
         setTimeout(() => {
@@ -25,7 +24,7 @@ export function createDisposableAuthSever() {
                 } else {
                     rej(error);
                 }
-                response.redirect(`${getAuthServerUrl()}/?message=${encodeURIComponent('You can now close this tab')}`);
+                response.redirect(`${serverUrl}/?message=${encodeURIComponent('You can now close this tab')}`);
                 request.destroy();
             });
 
@@ -38,7 +37,7 @@ export function createDisposableAuthSever() {
     return {
         createServerPromise,
         dispose: () => server && server.close(() => {
-            log('server closed');
+            logger.log('server closed');
         })
     };
 }

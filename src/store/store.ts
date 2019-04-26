@@ -1,20 +1,45 @@
+import autobind from 'autobind-decorator';
 import { Map } from 'immutable';
-import { createStore, Store } from 'redux';
-import { PersistConfig, persistReducer, persistStore } from 'redux-persist';
+import { Action, applyMiddleware, createStore, Store } from 'redux';
+import { PersistConfig, PersistPartial, persistReducer, persistStore } from 'redux-persist';
+import { SagaMiddleware } from 'redux-saga';
 import { Memento } from 'vscode';
 
-import rootReducer from '../reducers/root-reducer';
+import { SpotifyLogger } from '../info/logger';
+import { rootReducer } from '../reducers/root-reducer';
 import { DEFAULT_STATE, ISpotifyStatusState } from '../state/state';
 
 import { createDummyStorage, createVscodeStorage } from './storage/vscode-storage';
 
 export type SpotifyStore = Store<ISpotifyStatusState>;
 
-let store: SpotifyStore;
+@autobind
+export class SpotifyStoreInitializer {
+    constructor(
+        private logger: SpotifyLogger
+    ) {}
 
-export function getStore(memento?: Memento) {
-    if (!store) {
-        const persistConfig: PersistConfig = {
+    initializeStore(memento: Memento, middleware: SagaMiddleware): SpotifyStore {
+        const persistConfig = this.createPersistConfig(memento);
+        const persistedReducer = persistReducer<ISpotifyStatusState, Action>(persistConfig, rootReducer);
+
+        const reducer = (state: ISpotifyStatusState & PersistPartial, action: Action) => {
+            this.logger.log('root-reducer', action.type, JSON.stringify(action));
+            return persistedReducer(state, action);
+        };
+
+        const store = createStore(
+            reducer,
+            DEFAULT_STATE,
+            applyMiddleware(middleware)
+        );
+
+        persistStore(store);
+        return store;
+    }
+
+    private createPersistConfig(memento: Memento): PersistConfig {
+        return {
             key: 'root',
             storage: memento ? createVscodeStorage(memento) : createDummyStorage(),
             transforms: [{
@@ -27,22 +52,5 @@ export function getStore(memento?: Memento) {
                 in: (val: any, _key: string) => val
             }]
         };
-        const persistedReducer = persistReducer(persistConfig, rootReducer);
-
-        store = createStore(persistedReducer, DEFAULT_STATE);
-        persistStore(store);
     }
-    return store;
-}
-
-export function getState() {
-    return getStore().getState();
-}
-
-/**
- * True if on last state of Spotify it was muted(volume was equal 0)
- */
-export function isMuted() {
-    const state = getState();
-    return state && state.playerState.volume === 0;
 }

@@ -1,61 +1,70 @@
+import autobind from 'autobind-decorator';
+import { inject } from 'inversify';
 import * as spotify from 'spotify-node-applescript';
 import { window } from 'vscode';
 
+import { TYPES } from '../ioc/types';
+import { SpotifyStatusController } from '../spotify-status-controller';
 import { ISpotifyStatusStatePartial } from '../state/state';
-import { isMuted } from '../store/store';
+import { isMuted } from '../store/selector';
+import { SpotifyStore } from '../store/store';
+import { createCancelablePromise } from '../utils/utils';
 
-import { createCancelablePromise, QueryStatusFunction, SpotifyClient } from './spotify-client';
+import { SpotifyClient } from './spotify-client';
 
+@autobind
 export class OsxSpotifyClient implements SpotifyClient {
-    private _queryStatusFunc: QueryStatusFunction;
 
-    constructor(queryStatusFunc: QueryStatusFunction) {
-        this._queryStatusFunc = queryStatusFunc;
+    constructor(
+        @inject(TYPES.Store) private store: SpotifyStore,
+        @inject(TYPES.StatusController) private statusController: SpotifyStatusController
+    ) {
+        this.queryStatus();
     }
 
-    get queryStatusFunc() {
-        return this._queryStatusFunc;
+    queryStatus() {
+        this.statusController.queryStatus(this.pollStatus);
     }
 
     next() {
-        spotify.next(this._queryStatusFunc);
+        spotify.next(this.queryStatus);
     }
     previous() {
-        spotify.previous(this._queryStatusFunc);
+        spotify.previous(this.queryStatus);
     }
     play() {
-        spotify.play(this._queryStatusFunc);
+        spotify.play(this.queryStatus);
     }
     pause() {
-        spotify.pause(this._queryStatusFunc);
+        spotify.pause(this.queryStatus);
     }
     playPause() {
-        spotify.playPause(this._queryStatusFunc);
+        spotify.playPause(this.queryStatus);
     }
     muteVolume() {
-        spotify.muteVolume(this._queryStatusFunc);
+        spotify.muteVolume(this.queryStatus);
     }
     unmuteVolume() {
-        spotify.unmuteVolume(this._queryStatusFunc);
+        spotify.unmuteVolume(this.queryStatus);
     }
     muteUnmuteVolume() {
-        if (isMuted()) {
-            spotify.unmuteVolume(this._queryStatusFunc);
+        if (isMuted(this.store.getState())) {
+            spotify.unmuteVolume(this.queryStatus);
         } else {
-            spotify.muteVolume(this._queryStatusFunc);
+            spotify.muteVolume(this.queryStatus);
         }
     }
     volumeUp() {
-        spotify.volumeUp(this._queryStatusFunc);
+        spotify.volumeUp(this.queryStatus);
     }
     volumeDown() {
-        spotify.volumeDown(this._queryStatusFunc);
+        spotify.volumeDown(this.queryStatus);
     }
     toggleRepeating() {
-        spotify.toggleRepeating(this._queryStatusFunc);
+        spotify.toggleRepeating(this.queryStatus);
     }
     toggleShuffling() {
-        spotify.toggleShuffling(this._queryStatusFunc);
+        spotify.toggleShuffling(this.queryStatus);
     }
     pollStatus(cb: (status: ISpotifyStatusStatePartial) => void, getInterval: () => number) {
         let canceled = false;

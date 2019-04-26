@@ -1,10 +1,15 @@
+import autobind from 'autobind-decorator';
 import { exec } from 'child_process';
+import { inject } from 'inversify';
 
-import { log } from '../info/info';
+import { SpotifyLogger } from '../info/logger';
+import { TYPES } from '../ioc/types';
+import { SpotifyStatusController } from '../spotify-status-controller';
 import { ISpotifyStatusStatePartial } from '../state/state';
+import { createCancelablePromise } from '../utils/utils';
 
 import { OsAgnosticSpotifyClient } from './os-agnostic-spotify-client';
-import { createCancelablePromise, QueryStatusFunction, SpotifyClient } from './spotify-client';
+import { SpotifyClient } from './spotify-client';
 
 const SP_DEST = 'org.mpris.MediaPlayer2.spotify';
 const SP_PATH = '/org/mpris/MediaPlayer2';
@@ -71,21 +76,27 @@ const terminalCommand = (cmd: string) =>
 
 interface ICurrentVol { sinkNum: string | null; volume: number; }
 
+@autobind
 export class LinuxSpotifyClient extends OsAgnosticSpotifyClient implements SpotifyClient {
-    get queryStatusFunc() {
-        return this._queryStatusFunc;
+    private currentOnVolume: number;
+
+    constructor(
+        @inject(TYPES.StatusController) private statusController: SpotifyStatusController,
+        @inject(TYPES.Logger) private logger: SpotifyLogger
+    ) {
+        super();
+        this.queryStatus();
     }
 
-    private currentOnVolume: number;
-    private _queryStatusFunc: QueryStatusFunction;
-
-    constructor(_queryStatusFunc: QueryStatusFunction) {
-        super();
-        this._queryStatusFunc = () => {
-            // spotify with dbfus doesn't return correct state right after next/prev/pause/play
-            // command executtion. we need to wait
-            setTimeout(_queryStatusFunc, /*magic number*/600);
-        };
+    queryStatus() {
+        /**
+         * spotify with dbfus doesn't return correct state right after next/prev/pause/play
+         * command execution. we need to wait
+         */
+        setTimeout(
+            () => this.statusController.queryStatus(this.pollStatus),
+            /*magic number*/600
+        );
     }
 
     pollStatus(cb: (status: ISpotifyStatusStatePartial) => void, getInterval: () => number) {
@@ -119,17 +130,17 @@ export class LinuxSpotifyClient extends OsAgnosticSpotifyClient implements Spoti
 
     async playPause() {
         await terminalCommand(playPauseDebianCmd);
-        this._queryStatusFunc();
+        this.queryStatus();
     }
 
     async next() {
         await terminalCommand(playNextTrackDebianCmd);
-        this._queryStatusFunc();
+        this.queryStatus();
     }
 
     async previous() {
         await terminalCommand(playPreviousTrackDebianCmd);
-        this._queryStatusFunc();
+        this.queryStatus();
     }
 
     /**
@@ -207,7 +218,7 @@ export class LinuxSpotifyClient extends OsAgnosticSpotifyClient implements Spoti
                     }
                 }
             })
-            .catch(log);
+            .catch(this.logger.log);
     }
 
     volumeDown() {
@@ -224,7 +235,7 @@ export class LinuxSpotifyClient extends OsAgnosticSpotifyClient implements Spoti
                     }
                 }
             })
-            .catch(log);
+            .catch(this.logger.log);
     }
 
     private async getStatus(): Promise<ISpotifyStatusStatePartial> {

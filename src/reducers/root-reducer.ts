@@ -1,54 +1,58 @@
-import {
-    Action,
-    PLAYLISTS_LOAD_ACTION,
-    SELECT_PLAYLIST_ACTION,
-    SELECT_TRACK_ACTION,
-    SIGN_IN_ACTION,
-    SIGN_OUT_ACTION,
-    TRACKS_LOAD_ACTION,
-    UPDATE_STATE_ACTION
-} from '../actions/actions';
-import { log } from '../info/info';
+import { Api } from '@vscodespotify/spotify-common';
+import { Playlist, Track } from '@vscodespotify/spotify-common/lib/spotify/consts';
+
+import { ActionWithPayload, LoadTracksSuccessPayload, SignInSuccessPayload, SpotifyActionType } from '../actions/actions';
 import { DEFAULT_STATE, DUMMY_PLAYLIST, ISpotifyStatusState } from '../state/state';
+import { updateState } from '../utils/utils';
 
-export function update<T>(obj: T, propertyUpdate: Partial<T>): T {
-    return Object.assign({}, obj, propertyUpdate);
-}
+export function rootReducer(state: ISpotifyStatusState, action: ActionWithPayload): ISpotifyStatusState {
+    switch (action.type) {
+        case SpotifyActionType.UPDATE_STATE:
+            const payload = action.payload as Partial<ISpotifyStatusState>;
+            return updateState(state, payload);
 
-export default function (state: ISpotifyStatusState, action: Action): ISpotifyStatusState {
-    log('root-reducer', action.type, JSON.stringify(action));
-    if (action.type === UPDATE_STATE_ACTION) {
-        return update(state, action.state);
+        case SpotifyActionType.SIGN_IN_SUCCESS:
+            const { accessToken, refreshToken } = action.payload as SignInSuccessPayload;
+            return updateState(state, {
+                loginState: updateState(
+                    state.loginState, { accessToken, refreshToken }
+                )
+            });
+
+        case SpotifyActionType.SIGN_OUT:
+            return DEFAULT_STATE;
+
+        case SpotifyActionType.LOAD_PLAYLISTS_SUCCESS:
+            const playlists = action.payload as Playlist[];
+            return updateState(state, {
+                playlists: playlists.length ? playlists : [DUMMY_PLAYLIST]
+            });
+
+        case SpotifyActionType.SELECT_PLAYLIST:
+            const selectedPlaylist = action.payload as Playlist;
+            return updateState(state, {
+                selectedPlaylist
+            });
+
+        case SpotifyActionType.SELECT_TRACK:
+            const track = action.payload as Track;
+            return updateState(state, {
+                selectedTrack: track
+            });
+
+        case SpotifyActionType.LOAD_TRACKS_SUCCESS:
+            const { playlist, tracks } = action.payload as LoadTracksSuccessPayload;
+            return updateState(state, {
+                tracks: state.tracks.set(playlist.id, tracks)
+            });
+
+        case SpotifyActionType.SAVE_API:
+            const api = action.payload as Api;
+            return updateState(state, {
+                api
+            });
+
+        default:
+            return state;
     }
-    if (action.type === SIGN_IN_ACTION) {
-        return update(state, {
-            loginState: update(
-                state.loginState, { accessToken: action.accessToken, refreshToken: action.refreshToken }
-            )
-        });
-    }
-    if (action.type === SIGN_OUT_ACTION) {
-        return DEFAULT_STATE;
-    }
-    if (action.type === PLAYLISTS_LOAD_ACTION) {
-        return update(state, {
-            playlists: (action.playlists && action.playlists.length) ? action.playlists : [DUMMY_PLAYLIST]
-        });
-    }
-    if (action.type === SELECT_PLAYLIST_ACTION) {
-        return update(state, {
-            selectedPlaylist: action.playlist
-        });
-    }
-    if (action.type === SELECT_TRACK_ACTION) {
-        return update(state, {
-            selectedTrack: action.track
-        });
-    }
-    if (action.type === TRACKS_LOAD_ACTION) {
-        return update(state, {
-            tracks: state.tracks.set(action.playlist.id, action.tracks)
-        });
-    }
-    return state;
 }

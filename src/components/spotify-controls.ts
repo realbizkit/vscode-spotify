@@ -1,7 +1,10 @@
+import { inject, injectable } from 'inversify';
 import { extensions, StatusBarAlignment, StatusBarItem, window } from 'vscode';
 
-import { getButtonPriority, isButtonToBeShown } from '../config/spotify-config';
+import { SpotifyConfig } from '../config/spotify-config';
 import { BUTTON_ID_SIGN_IN, BUTTON_ID_SIGN_OUT } from '../consts/consts';
+import { TYPES } from '../ioc/types';
+import { SpotifyStore } from '../store/store';
 
 export interface Button {
     /**
@@ -56,6 +59,7 @@ export interface ButtonWithDynamicColor extends Button {
     dynamicColor: (cond: boolean) => string;
 }
 
+@injectable()
 export class SpotifyControls {
     get buttons(): Button[] {
         return this._buttons;
@@ -72,7 +76,10 @@ export class SpotifyControls {
     private _signInButton: Button;
     private _signOutButton: Button;
 
-    constructor() {
+    constructor(
+        @inject(TYPES.Config) private config: SpotifyConfig,
+        @inject(TYPES.Store) private store: SpotifyStore
+    ) {
         const buttonsInfo = [
             { id: 'next', text: '$(chevron-right)' },
             { id: 'previous', text: '$(chevron-left)' },
@@ -103,8 +110,8 @@ export class SpotifyControls {
         this._buttons = buttonsInfo.map(item => {
             const buttonName = item.id + 'Button';
             const buttonCommand = 'spotify.' + item.id;
-            const buttonPriority = getButtonPriority(buttonName);
-            const visible = isButtonToBeShown(buttonName);
+            const buttonPriority = this.config.getButtonPriority(buttonName);
+            const visible = this._isButtonToBeShown(buttonName);
             const statusBarItem = window.createStatusBarItem(StatusBarAlignment.Left, buttonPriority);
             const {title} = commands.filter(command => command.command === buttonCommand)[0] || { title: '' };
             statusBarItem.text = item.text;
@@ -182,13 +189,14 @@ export class SpotifyControls {
     dispose() {
         this.buttons.forEach(button => { button.statusBarItem.dispose(); });
     }
+
     private _hideShowButton(button: Button) {
-        button.visible = isButtonToBeShown(button.buttonName);
+        button.visible = this._isButtonToBeShown(button.buttonName);
         button.visible ? button.statusBarItem.show() : button.statusBarItem.hide();
     }
 
     private _updateText(button: ButtonWithDynamicText, condition: boolean): boolean {
-        if (!isButtonToBeShown(button.buttonName)) {
+        if (!this._isButtonToBeShown(button.buttonName)) {
             return false;
         }
         const dynamicText = button.dynamicText(condition);
@@ -200,7 +208,7 @@ export class SpotifyControls {
     }
 
     private _updateColor(button: ButtonWithDynamicColor, condition: boolean): boolean {
-        if (!isButtonToBeShown(button.buttonName)) {
+        if (!this._isButtonToBeShown(button.buttonName)) {
             return false;
         }
         const dynamicColor = button.dynamicColor(condition);
@@ -209,5 +217,18 @@ export class SpotifyControls {
             return true;
         }
         return false;
+    }
+
+    private _isButtonToBeShown(buttonId: string): boolean {
+        const shouldShow = this.config.isButtonToBeShown(buttonId);
+        const { loginState } = this.store.getState();
+
+        if (buttonId === `${BUTTON_ID_SIGN_IN}Button`) {
+            return shouldShow && !loginState;
+        } else if (buttonId === `${BUTTON_ID_SIGN_OUT}Button`) {
+            return shouldShow && !!loginState;
+        }
+
+        return shouldShow;
     }
 }

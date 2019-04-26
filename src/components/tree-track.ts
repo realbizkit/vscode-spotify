@@ -1,9 +1,11 @@
+import { inject, injectable } from 'inversify';
 import * as path from 'path';
 import * as vscode from 'vscode';
 
-import { actionsCreator } from '../actions/actions';
+import { SpotifyAction } from '../actions/actions';
+import { TYPES } from '../ioc/types';
 import { Playlist, Track } from '../state/state';
-import { getState, getStore } from '../store/store';
+import { SpotifyStore } from '../store/store';
 
 const createTrackTreeItem = (t: Track, playlist: Playlist, trackIndex: number) =>
     new TrackTreeItem(t, vscode.TreeItemCollapsibleState.None, {
@@ -12,15 +14,14 @@ const createTrackTreeItem = (t: Track, playlist: Playlist, trackIndex: number) =
         arguments: [trackIndex, playlist]
     });
 
-export const connectTrackTreeView = (view: vscode.TreeView<Track>) =>
-    vscode.Disposable.from(
-        view.onDidChangeSelection(e => {
-            const track = e.selection[0];
-            actionsCreator.selectTrackAction(track);
-        }),
+export function connectTrackTreeView(view: vscode.TreeView<Track>, store: SpotifyStore, action: SpotifyAction) {
+    return vscode.Disposable.from(
+        view.onDidChangeSelection(e =>
+            store.dispatch(action.selectTrack(e.selection[0]))
+        ),
         view.onDidChangeVisibility(e => {
             if (e.visible) {
-                const state = getState();
+                const state = store.getState();
                 const { selectedTrack, selectedPlaylist } = state;
 
                 if (selectedTrack && selectedPlaylist) {
@@ -34,7 +35,9 @@ export const connectTrackTreeView = (view: vscode.TreeView<Track>) =>
             }
         })
     );
+}
 
+@injectable()
 export class TreeTrackProvider implements vscode.TreeDataProvider<Track> {
     readonly onDidChangeTreeDataEmitter: vscode.EventEmitter<Track | undefined> = new vscode.EventEmitter<Track | undefined>();
     readonly onDidChangeTreeData: vscode.Event<Track | undefined> = this.onDidChangeTreeDataEmitter.event;
@@ -44,9 +47,11 @@ export class TreeTrackProvider implements vscode.TreeDataProvider<Track> {
     private selectedTrack?: Track;
     private view: vscode.TreeView<Track>;
 
-    constructor() {
-        getStore().subscribe(() => {
-            const { tracks, selectedPlaylist, selectedTrack } = getState();
+    constructor(
+        @inject(TYPES.Store) private store: SpotifyStore
+    ) {
+        this.store.subscribe(() => {
+            const { tracks, selectedPlaylist, selectedTrack } = this.store.getState();
             const newTracks = tracks.get((selectedPlaylist || { id: '' }).id);
             if (this.tracks !== newTracks || this.selectedTrack !== selectedTrack) {
                 if (this.selectedTrack !== selectedTrack) {

@@ -11,6 +11,7 @@
 		"noUnusedParameters": true,
 		"strictNullChecks": true,
 		"experimentalDecorators": true,
+		"emitDecoratorMetadata": true,
 		"skipLibCheck": true,
 		"alwaysStrict": true
 	},
